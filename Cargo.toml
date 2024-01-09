@@ -1,0 +1,19 @@
+[package]
+name = "bluetooth-test"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-std = "1.12.0"
+windows = { version = "0.52.0", features = [
+    "Devices_Bluetooth_Rfcomm",
+    "Devices_Bluetooth",
+    "Devices_Enumeration",
+    "Devices",
+    "Foundation_Collections",
+    "Foundation",
+    "Networking",
+    "Networking_Sockets",
+] }
