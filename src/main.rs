@@ -1,8 +1,7 @@
-use std::borrow::Borrow;
-use std::io::{Error, Write};
+use core::panic;
+use std::io::Error;
 
-use async_std::{io, task};
-use windows::core::HSTRING;
+use async_std::task;
 use windows::Devices::Bluetooth::Rfcomm::{RfcommServiceId, RfcommServiceProvider};
 use windows::Foundation::TypedEventHandler;
 use windows::Networking::Sockets::{
@@ -10,9 +9,7 @@ use windows::Networking::Sockets::{
 };
 
 fn main() -> Result<(), Error> {
-    let create_server_task = task::spawn(async { create_server().await });
-
-    task::block_on(create_server_task);
+    task::block_on(async { create_server().await });
 
     Ok(())
 }
@@ -35,28 +32,61 @@ async fn create_server() {
     // let device = RfcommDeviceService::FromIdAsync(device_id).unwrap();
 
     let server_service_id = RfcommServiceId::ObexFileTransfer().unwrap();
-    let server_provider = RfcommServiceProvider::CreateAsync(&server_service_id).unwrap();
 
-    let listener = StreamSocketListener::new().unwrap();
+    let server_provider = match RfcommServiceProvider::CreateAsync(&server_service_id)
+        .unwrap()
+        .await
+    {
+        Ok(service_provider) => {
+            println!(
+                "Service Provider created with ID: {}",
+                service_provider.ServiceId().unwrap().AsString().unwrap()
+            );
+            service_provider
+        }
+        Err(err) => panic!("Error created: {:#?}", err),
+    };
 
-    let handler: TypedEventHandler<
+    let connection_handler: TypedEventHandler<
         StreamSocketListener,
         StreamSocketListenerConnectionReceivedEventArgs,
-    > = TypedEventHandler::new(|_, _| -> windows::core::Result<()> {
+    > = TypedEventHandler::new(|_, args| -> windows::core::Result<()> {
         println!("New connection");
+        println!("{:#?}", args);
 
         Ok(())
     });
     // listener.ConnectionReceived(|| {});
 
-    listener
+    let listener = match StreamSocketListener::new() {
+        Ok(listener) => {
+            println!("Socket Listener Object Created");
+            listener
+        }
+        Err(err) => panic!("Socket listener failed to create: {:#?}", err),
+    };
+
+    match listener
         .BindServiceNameWithProtectionLevelAsync(
-            &server_service_id.AsString().unwrap(),
+            &server_provider.ServiceId().unwrap().AsString().unwrap(),
             SocketProtectionLevel::BluetoothEncryptionAllowNullAuthentication,
         )
-        .unwrap();
+        .unwrap()
+        .await
+    {
+        Ok(_) => println!("Listener binding succeeded"),
+        Err(err) => panic!("Listener failed to bind {:#?}", err),
+    };
 
-    listener.ConnectionReceived(&handler).unwrap();
+    listener.ConnectionReceived(&connection_handler).unwrap();
+
+    match server_provider.StartAdvertising(&listener) {
+        Ok(_) => println!(
+            "Server Advertising with ID {:?}",
+            server_provider.ServiceId().unwrap().AsShortId().unwrap()
+        ),
+        Err(err) => panic!("Server could not start advertising: \n {:#?}", err),
+    };
 
     let mut input_sink = String::new();
 

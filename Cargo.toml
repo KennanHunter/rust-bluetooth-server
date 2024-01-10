@@ -16,4 +16,6 @@ windows = { version = "0.52.0", features = [
     "Foundation",
     "Networking",
     "Networking_Sockets",
+    "Foundation_Collections",
+    "Storage_Streams",
 ] }
